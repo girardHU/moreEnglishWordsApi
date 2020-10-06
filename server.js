@@ -1,25 +1,23 @@
 /**
  * Required External Modules
  */
-const express = require("express");
-const path = require("path");
+const express = require('express');
+const path = require('path');
 const MongoClient = require('mongodb').MongoClient;
-const assert = require('assert');
 const url = require('url');
-const { get } = require("http");
 
 /**
  * App Variables
  */
 const app = express();
-const port = process.env.port || 3000;
-
+const port = process.env.PORT || 3000;
 /**
  *  App Configuration
  */
 app.use(express.static(path.join(__dirname, "public")));
-app.use(express.json()) // for parsing application/json
-app.use(express.urlencoded({ extended: true })) // for parsing application/x-www-form-urlencoded
+app.use(express.json()); // for parsing application/json
+app.use(express.urlencoded({ extended : true })); // for parsing application/x-www-form-urlencoded
+app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerDocs)); // swagger UI middleware ?
 
 /**
  * Database Connection
@@ -27,7 +25,7 @@ app.use(express.urlencoded({ extended: true })) // for parsing application/x-www
 // Connection URL
 const mongodbUrl = `mongodb+srv://${process.env.DB_USER}:${process.env.DB_PASSWORD}@cluster0.ratnh.gcp.mongodb.net/${process.env.DB_NAME}?retryWrites=true&w=majority`;
 
-MongoClient.connect(mongodbUrl, { useUnifiedTopology: true }, (err, client) => {
+MongoClient.connect(mongodbUrl, { useUnifiedTopology : true }, (err, client) => {
   if (err) return console.error(err)
   console.log("Connected successfully to server");
   const db = client.db(process.env.DB_NAME);
@@ -37,7 +35,7 @@ MongoClient.connect(mongodbUrl, { useUnifiedTopology: true }, (err, client) => {
    * Routes Definitions
    */
   app.get('/', (req, res) => {
-    res.status(200).send('working properly');
+    res.status(200).json({ success : 'welcome to the EnglishWordsAPI' });
   });
 
   app.get('/word', (req, res) => {
@@ -58,29 +56,63 @@ MongoClient.connect(mongodbUrl, { useUnifiedTopology: true }, (err, client) => {
   app.post('/word', (req, res) => {
     console.log(req.body);
     if (!req.body['word'] || !req.body['translation'])
-      return res.status(422).json({ error: 'need exactly 2 two params : a word and a translation' });
+      return res.status(422).json({ error : 'need exactly two json body params : a word (string) and a translation ([string])' });
     // TODO : VERIFIE INPUT
-    wordsCollection.insertOne(req.body, (err, result) => {
-      if (err) {
-        // TODO : check HTTP code
-        console.log('/word post, insertOne : ', err)
-        return res.status(500).json({ error: 'could not save to database' });
-      }
-      return res.status(201).json({ succes : 'successfully created one entry : ' + result })
+    wordsCollection.find({ 'word' : req.body['word'] }).count()
+    .then(findResponse => {
+      if (findResponse > 0)
+        return res.status(409).json ({ error : 'resource already exists, try updating it instead' });
+      wordsCollection.insertOne(req.body, (insertErr, insertResponse) => {
+        console.log(insertResponse.ops)
+        if (insertErr) {
+          // TODO : check HTTP code
+          console.log('/word post, insertOne : ', insertErr);
+          return res.status(500).json({ error : 'could not save to database' });
+        }
+        return res.status(201).json({ success : 'successfully created one entry : ' + insertResponse.ops });
+      });
+    })
+    .catch(findErr => {
+      console.log('/word post, find : ', findErr);
+      res.status(500).json({ error : 'could not check if the entry already exists' });
     });
   });
 
   app.delete('/word', (req, res) => {
     // TODO : CHECK PARAMS
-    wordsCollection.deleteOne(req.body, (err, result) => {
+    wordsCollection.deleteOne(req.body, (err, response) => {
       if (err) {
         // TODO : check HTTP code
         console.log('/word delete, deleteOne : ', err)
-        return res.status(500).json({ error: 'could not delete entry' });
+        return res.status(500).json({ error : 'could not delete entry' });
       }
-      if (!result.deletedCount)
-        return res.status(404).json({ error: 'cannot delete, entry not found' });
-      return res.status(200).json({ succes : 'successfully deleted one entry : ' + result })
+      console.log(response)
+      if (!response.deletedCount)
+        return res.status(404).json({ error : 'cannot delete, entry not found' });
+      return res.status(200).json({ success : 'successfully deleted one entry : ' + req.body })
+    });
+  });
+
+  app.patch('/word', (req, res) => {
+    const queryParams = url.parse(req.url, true).query;
+    console.log(queryParams);
+    if (!queryParams['word'] || !queryParams['replace'])
+      return res.status(422).json({ error : 'need string params to specify the options like so : word=<string>&replace=<boolean>' });
+    if (!req.body['word'] || !req.body['translation'])
+      return res.status(422).json({ error : 'need exactly two json body params : a word (string) and a translation ([string])' });
+    if (Object.keys(req.body).length > 2)
+      return res.status(422).json({ error : 'provided more than the two json body params expected' });
+    queryParams['replace'] ? wordsCollection.findOneAndReplace : wordsCollection.findOneAndUpdate (
+      {'word' : queryParams['word'] },
+      req.body,
+      queryParams['upsert'] ? { upsert : true } : { upsert : false },
+      (err, response) => {
+        if (err) {
+          // TODO : check HTTP code
+          console.log(`/word patch, ${queryParams['replace'] ? 'findOneAndReplace' : 'findOneAndUpdate'} : `, err);
+          return res.status(500).json({ error : 'could not update entry' });
+        }
+        return res.status(201).json({ success : 'successfully created one entry : ' + insertResponse.ops });
     });
   });
 
