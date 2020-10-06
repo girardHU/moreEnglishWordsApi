@@ -1,7 +1,7 @@
 {
   "name": "moreenglishwordsapi",
   "version": "1.0.0",
-  "description": "api which records words in english with traductions",
+  "description": "API used to extend your word pool in any language, currently serving only english to french translations",
   "main": "server.js",
   "scripts": {
     "dev": "nodemon -r dotenv/config server.js"

@@ -21,8 +21,8 @@ const port = process.env.PORT || 3000;
 const swaggerOptions = {
   swaggerDefinition : {
     info : {
-      title : 'English Words API',
-      description : 'api which records words in english with traductions',
+      title : 'Unknown Words API',
+      description : 'API used to extend your word pool in any language, currently serving only english to french translations',
       contact : {
         name : 'Hugo Girard'
       },
@@ -64,86 +64,200 @@ MongoClient.connect(mongodbUrl, { useUnifiedTopology : true }, (err, client) => 
    * @swagger
    * /word:
    *  get:
-   *    description: used to request a single word
+   *    summary: used to find a single word
+   *    description: ""
+   *    produces:
+   *    - "application/json"
+   *    parameters:
+   *      - in: path
+   *        name: value
+   *        schema:
+   *          type: string
+   *        required: true
+   *        description: The very `word` you want to find in the database
    *    responses:
+   *      '500':
+   *        description: An error triggered while querying database, try again later
    *      '200':
    *        description: A successful response, containing the requested document
    */
-  app.get('/word', (req, res) => {
-    const queryParams = url.parse(req.url, true).query;
-    console.log(queryParams);
-    if (!queryParams['word'])
-      return res.status(422).json({ error : 'need string param to specify the word requested like so : word=<yourWord>' });
-    wordsCollection.findOne(queryParams, (err, obj) => {
+  app.get('/word/:value', (req, res) => {
+    // if (!req.params.value)
+    //   return res.status(422).json({
+    //     satus : 'error',
+    //     message : 'Need a path parameter corresponding to the value of the word you are requiring',
+    //     data : {}
+    //   });
+    wordsCollection.findOne({ value : req.params.value }, (err, obj) => {
       if (err) {
         console.log('/word get, find : ', err);
-        return res.json({ error : 'error while querying database' });
-      } else {
-        return res.status(200).json({ success : obj });
+        return res.status(500).json({
+          satus : 'error',
+          message : 'error while querying database',
+          data : {}
+        });
       }
+      if (!obj)
+        return res.status(404).json({
+          status : 'error',
+          message : 'Entry not found',
+          data : {
+            value : req.params.value
+          }
+        });
+      res.status(200).json({
+        status : 'success',
+        message : 'successfully retrieved the object in database',
+        data : obj
+      });
     });
   });
 
+  /**
+   * @swagger
+   * /word:
+   *  post:
+   *    summary: used to add a single word
+   *    description: ""
+   *    produces:
+   *    - "application/json"
+   *    parameters:
+   *      - in: body
+   *        name: word
+   *        schema:
+   *          type: string
+   *        required: true
+   *        description: The very `word` you want to add in the database
+   *      - in: body
+   *        name: translation
+   *        schema:
+   *          type: "array"
+   *          items:
+   *            type: "string"
+   *        required: true
+   *        description: The translation.s of the given `word`
+   *    responses:
+   *      '422':
+   *        description: An error triggered by not passing either `value`, `translations` or both body parameters
+   *      '409':
+   *        description: The given `value` entry already exists, try updating it by using the dedicated endpoint
+   *      '500':
+   *        description: An error triggered while querying database, try again later
+   *      '201':
+   *        description: A successful response, containing the new document
+   */
   app.post('/word', (req, res) => {
     console.log(req.body);
-    if (!req.body['word'] || !req.body['translation'])
-      return res.status(422).json({ error : 'need exactly two json body params : a word (string) and a translation ([string])' });
+    if (!req.body['value'] || !req.body['translations'] || Object.keys(req.body).length > 2)
+      return res.status(422).json({
+        status : 'error',
+        message : 'exactly two json body parameters required : a value (string) and translations ([string])',
+        data : req.body
+      });
     // TODO : VERIFIE INPUT
-    wordsCollection.find({ 'word' : req.body['word'] }).count()
-    .then(findResponse => {
-      if (findResponse > 0)
-        return res.status(409).json ({ error : 'resource already exists, try updating it instead' });
+    wordsCollection.find({ value : req.body['value'] }).count()
+    .then(foundDocumentsNb => {
+      if (foundDocumentsNb > 0)
+        return res.status(409).json ({
+          status : 'error',
+          message : 'resource already exists, try updating it instead',
+        data : { value : req.body['value'] }
+      });
       wordsCollection.insertOne(req.body, (insertErr, insertResponse) => {
         console.log(insertResponse.ops)
         if (insertErr) {
           // TODO : check HTTP code
-          console.log('/word post, insertOne : ', insertErr);
-          return res.status(500).json({ error : 'could not save to database' });
+          console.log('/word post (new), insertOne : ', insertErr);
+          return res.status(500).json({
+            satus : 'error',
+            message : 'error while querying database',
+            data : {}
+          });
         }
-        return res.status(201).json({ success : 'successfully created one entry : ' + insertResponse.ops });
+        res.status(201).json({
+          status : 'success',
+          message : 'successfully created one entry',
+          data : insertResponse.ops
+        });
       });
     })
     .catch(findErr => {
       console.log('/word post, find : ', findErr);
-      res.status(500).json({ error : 'could not check if the entry already exists' });
+      res.status(500).json({
+        satus : 'error',
+        message : 'error while querying database',
+        data : {}
+      });
     });
   });
 
-  app.delete('/word', (req, res) => {
+  app.delete('/word/:value', (req, res) => {
     // TODO : CHECK PARAMS
-    wordsCollection.deleteOne(req.body, (err, response) => {
+    wordsCollection.deleteOne({ value : req.params.value }, (err, response) => {
       if (err) {
         // TODO : check HTTP code
         console.log('/word delete, deleteOne : ', err)
-        return res.status(500).json({ error : 'could not delete entry' });
+        return res.status(500).json({
+          satus : 'error',
+          message : 'error while querying database',
+          data : {}
+        });
       }
       console.log(response)
       if (!response.deletedCount)
-        return res.status(404).json({ error : 'cannot delete, entry not found' });
-      return res.status(200).json({ success : 'successfully deleted one entry : ' + req.body })
+        return res.status(404).json({
+          status : 'error',
+          message : 'Entry not found',
+          data : {
+            value : req.params.value
+          }
+        });
+      res.status(200).json({
+        status : 'success',
+        message : 'successfully deleted one entry',
+        data : { value : req.params.value }
+      });
     });
   });
 
-  app.put('/word', (req, res) => {
-    const queryParams = url.parse(req.url, true).query;
-    console.log(queryParams);
-    if (!queryParams['word'] || !queryParams['replace'])
-      return res.status(422).json({ error : 'need string params to specify the options like so : word=<string>&replace=<boolean>' });
-    if (!req.body['word'] || !req.body['translation'])
-      return res.status(422).json({ error : 'need exactly two json body params : a word (string) and a translation ([string])' });
-    if (Object.keys(req.body).length > 2)
-      return res.status(422).json({ error : 'provided more than the two json body params expected' });
-    queryParams['replace'] ? wordsCollection.findOneAndReplace : wordsCollection.findOneAndUpdate (
-      {'word' : queryParams['word'] },
-      req.body,
-      queryParams['upsert'] ? { upsert : true } : { upsert : false },
+  app.post('/word/:value', (req, res) => {
+    console.log('Object.keys(req.body).length : ', Object.keys(req.body).length)
+    if (!req.body['word'] || !req.body['replace'] || Object.keys(req.body).length > 2)
+      return res.status(422).json({
+        status : 'error',
+        message : 'bad parameters, please refere to the documentation',
+        data : req.body
+      });
+    req.body['replace'] ? wordsCollection.findOneAndReplace : wordsCollection.findOneAndUpdate (
+      {'value' : req.body['word']['value'] },
+      req.body['world'],
+      req.body['upsert'] ? { upsert : true } : { upsert : false },
       (err, response) => {
         if (err) {
           // TODO : check HTTP code
-          console.log(`/word put, ${queryParams['replace'] ? 'findOneAndReplace' : 'findOneAndUpdate'} : `, err);
-          return res.status(500).json({ error : 'could not update entry' });
+          console.log(`/word post (update), ${req.body['replace'] ? 'findOneAndReplace' : 'findOneAndUpdate'} : `, err);
+          return res.status(500).json({
+            satus : 'error',
+            message : 'error while querying database',
+            data : {}
+          });
         }
-        return res.status(201).json({ success : 'successfully created one entry : ' + insertResponse.ops });
+        res.status(201).json({
+          status : 'success',
+          message : 'successfully updated one entry',
+          data : response.ops
+        });
+    });
+  });
+
+  app.use((req, res, next) => {
+    res.status(404).json({
+      satus : 'error',
+      message : 'nothing found here',
+      data : {
+        url : req.url,
+        verb : req.method
+      }
     });
   });
 
@@ -157,5 +271,25 @@ MongoClient.connect(mongodbUrl, { useUnifiedTopology : true }, (err, client) => 
   // client.close();
 });
 
-
-
+/**
+ * @swagger
+ * definitions:
+ *  Word:
+ *    type: "object"
+ *    properties:
+ *      value:
+ *        type: "string"
+ *      translations:
+ *        type: "array"
+ *        items:
+ *          type: "string"
+ *  ApiResponse:
+ *    type: "object"
+ *    properties:
+ *      status:
+ *        type: "string"
+ *      message:
+ *        type: "string"
+ *      data:
+ *        type: "object"
+ */
