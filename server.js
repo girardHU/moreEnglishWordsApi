@@ -3,6 +3,8 @@
  */
 const express = require('express');
 const path = require('path');
+const swaggerJSDoc = require('swagger-jsdoc');
+const swaggerUi = require('swagger-ui-express');
 const MongoClient = require('mongodb').MongoClient;
 const url = require('url');
 
@@ -11,6 +13,27 @@ const url = require('url');
  */
 const app = express();
 const port = process.env.PORT || 3000;
+
+/**
+ * Swagger Variables
+ */
+// Extended : http://swagger.io/specification/#infoObject
+const swaggerOptions = {
+  swaggerDefinition : {
+    info : {
+      title : 'English Words API',
+      description : 'api which records words in english with traductions',
+      contact : {
+        name : 'Hugo Girard'
+      },
+      servers : [`http://localhost:${port}`]
+    }
+  },
+  // ['.routes/*.js']
+  apis : ['server.js']
+};
+const swaggerDocs = swaggerJSDoc(swaggerOptions);
+
 /**
  *  App Configuration
  */
@@ -37,7 +60,15 @@ MongoClient.connect(mongodbUrl, { useUnifiedTopology : true }, (err, client) => 
   app.get('/', (req, res) => {
     res.status(200).json({ success : 'welcome to the EnglishWordsAPI' });
   });
-
+  /**
+   * @swagger
+   * /word:
+   *  get:
+   *    description: used to request a single word
+   *    responses:
+   *      '200':
+   *        description: A successful response, containing the requested document
+   */
   app.get('/word', (req, res) => {
     const queryParams = url.parse(req.url, true).query;
     console.log(queryParams);
@@ -93,7 +124,7 @@ MongoClient.connect(mongodbUrl, { useUnifiedTopology : true }, (err, client) => 
     });
   });
 
-  app.patch('/word', (req, res) => {
+  app.put('/word', (req, res) => {
     const queryParams = url.parse(req.url, true).query;
     console.log(queryParams);
     if (!queryParams['word'] || !queryParams['replace'])
@@ -109,7 +140,7 @@ MongoClient.connect(mongodbUrl, { useUnifiedTopology : true }, (err, client) => 
       (err, response) => {
         if (err) {
           // TODO : check HTTP code
-          console.log(`/word patch, ${queryParams['replace'] ? 'findOneAndReplace' : 'findOneAndUpdate'} : `, err);
+          console.log(`/word put, ${queryParams['replace'] ? 'findOneAndReplace' : 'findOneAndUpdate'} : `, err);
           return res.status(500).json({ error : 'could not update entry' });
         }
         return res.status(201).json({ success : 'successfully created one entry : ' + insertResponse.ops });
