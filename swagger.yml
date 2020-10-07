@@ -3,7 +3,7 @@ version: "1.0.0"
 title: "More Foreign Words"
 tags:
 - name: "word"
-  description: "CRUD with single word"
+  description: "CRUD for a single word"
 
 paths:
   /word:
@@ -22,10 +22,14 @@ paths:
           required: true
           description: The very `word` you want to find in the database
       responses:
-        '500':
-          description: An error triggered while querying the database, try again later
         '200':
           description: A successful response, containing the requested document
+        '404':
+          description: The requested `value` was correct but no entry where found in the database
+        '422':
+          description: Passing a path param `value` that is not alphabetical
+        '500':
+          description: An error triggered while querying the database, try again later
     post:
       tags:
       - "word"
@@ -49,35 +53,14 @@ paths:
           required: true
           description: The translation.s of the given word
       responses:
-        '422':
-          description: An error triggered by either omiting `value`, `translations`, both or sending a value not alphabetical
-        '409':
-          description: The given `value` entry already exists, try updating it by using the dedicated endpoint
-        '500':
-          description: An error triggered while querying the database, try again later
         '201':
           description: A successful response, containing the new document
-    delete:
-      tags:
-      - "word"
-      summary: used to delete a single word
-      description: ""
-      produces:
-      - "application/json"
-      parameters:
-        - in: body
-          name: value
-          schema:
-            type: string
-          required: true
-          description: The value of the word you want to delete
-      responses:
+        '409':
+          description: The given `value` entry already exists, try updating it by using the dedicated endpoint
+        '422':
+          description: An error triggered by either omiting `value`, `translations`, both, sending a `value` not alphabetical or providing extra parameters
         '500':
           description: An error triggered while querying the database, try again later
-        '404':
-          description: No entry with the given `value` where found, please check spelling and try again
-        '200':
-          description: A successful response, asserting that the word has been removed from the database
   /word/{value}:
     post:
       tags:
@@ -106,12 +89,33 @@ paths:
           required: false
           description:  Default `False`, set to `True` if you want to insert the word if no entry corresponding to the given `value` were found
       responses:
+        '201':
+          description: A successful response, containing the updated document
         '422':
           description: omited the `word` parameter
         '500':
           description: An error triggered while querying the database, try again later
-        '201':
-          description: A successful response, containing the updated document
+    delete:
+      tags:
+      - "word"
+      summary: used to delete a single word
+      description: ""
+      produces:
+      - "application/json"
+      parameters:
+        - in: body
+          name: value
+          schema:
+            type: string
+          required: true
+          description: The value of the word you want to delete
+      responses:
+        '200':
+          description: A successful response, asserting that the word has been removed from the database
+        '404':
+          description: No entry with the given `value` where found, please check spelling and try again
+        '500':
+          description: An error triggered while querying the database, try again later
 
 
 definitions:
