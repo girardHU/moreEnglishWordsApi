@@ -38,7 +38,7 @@ async function start() {
     res.status(200).json({ success : 'welcome to the EnglishWordsAPI' });
   });
 
-  app
+  app.use(require('./routes'));
 
   app.use((req, res, next) => {
     res.status(404).json({
